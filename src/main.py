@@ -22,6 +22,26 @@ def format_cep(value: str) -> str:
     return f"{digits[:5]}-{digits[5:]}"
 
 
+def format_telefone(value: str) -> str:
+    """Formata telefone comercial sem tentar identificar o titular."""
+    digits = sanitizar_documento(value)
+    if len(digits) == 11:
+        return f"({digits[:2]}) {digits[2:7]}-{digits[7:]}"
+    if len(digits) == 10:
+        return f"({digits[:2]}) {digits[2:6]}-{digits[6:]}"
+    return value or "Não informado"
+
+
+def telefones_comerciais(data: dict[str, Any]) -> list[str]:
+    """Retorna os telefones empresariais explicitamente publicados pela fonte."""
+    encontrados = []
+    for campo in ("ddd_telefone_1", "ddd_telefone_2", "telefone"):
+        telefone = value(data, campo, default="")
+        if telefone and telefone not in encontrados:
+            encontrados.append(str(telefone))
+    return [format_telefone(telefone) for telefone in encontrados]
+
+
 def value(data: dict[str, Any], *keys: str, default="Não informado") -> Any:
     for key in keys:
         current = data.get(key)
@@ -93,7 +113,8 @@ def exibir_cnpj(data: dict[str, Any], postal: dict[str, Any] | None = None) -> N
     print_field("UF", value(data, "uf"))
     print("\nCONTATO COMERCIAL CADASTRADO")
     print_field("E-mail", value(data, "email"))
-    print_field("Telefone", value(data, "ddd_telefone_1", "telefone"))
+    print_field("Telefones comerciais publicados", telefones_comerciais(data))
+    print("Nenhuma busca reversa é feita: não são consultados titular, WhatsApp, PIX, localização ou dados pessoais.")
     if postal:
         print("\nENRIQUECIMENTO POSTAL PELO CEP")
         print_field("CEP consultado", format_cep(str(value(postal, "cep"))))
