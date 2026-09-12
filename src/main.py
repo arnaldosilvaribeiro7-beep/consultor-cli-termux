@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """Consultor CLI: consulta pública de CNPJ e validação local de CPF."""
 
-import json
 import re
 import sys
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request, urlopen
 
-API_URL = "https://brasilapi.com.br/api/cnpj/v1/{}"
+from api import consultar_cnpj
+from validators import sanitizar_documento, validar_cpf
 
 REGIOES_FISCAIS = {
     "0": "Rio Grande do Sul",
@@ -25,7 +23,7 @@ REGIOES_FISCAIS = {
 
 
 def only_digits(value: str) -> str:
-    return re.sub(r"\D", "", value or "")
+    return sanitizar_documento(value)
 
 
 def format_cnpj(value: str) -> str:
@@ -40,42 +38,6 @@ def format_cpf(value: str) -> str:
     if len(digits) != 11:
         return value
     return f"{digits[:3]}.{digits[3:6]}.{digits[6:9]}-{digits[9:]}"
-
-
-def validar_cpf(cpf: str) -> bool:
-    digits = only_digits(cpf)
-    if len(digits) != 11 or len(set(digits)) == 1:
-        return False
-    total = sum(int(digit) * weight for digit, weight in zip(digits[:9], range(10, 1, -1)))
-    first = (total * 10) % 11
-    first = 0 if first == 10 else first
-    if first != int(digits[9]):
-        return False
-    total = sum(int(digit) * weight for digit, weight in zip(digits[:10], range(11, 1, -1)))
-    second = (total * 10) % 11
-    second = 0 if second == 10 else second
-    return second == int(digits[10])
-
-
-def consultar_cnpj(cnpj: str, timeout: int = 15) -> dict[str, Any]:
-    digits = only_digits(cnpj)
-    if len(digits) != 14:
-        raise ValueError("CNPJ deve conter 14 dígitos.")
-    request = Request(API_URL.format(digits), headers={"User-Agent": "consultor-cli/1.0"})
-    try:
-        with urlopen(request, timeout=timeout) as response:
-            data = json.loads(response.read().decode("utf-8"))
-    except HTTPError as exc:
-        if exc.code == 404:
-            raise RuntimeError("CNPJ não encontrado na base consultada.") from exc
-        raise RuntimeError(f"A API respondeu com HTTP {exc.code}.") from exc
-    except (URLError, TimeoutError) as exc:
-        raise RuntimeError("Não foi possível acessar a API pública. Verifique a internet.") from exc
-    except json.JSONDecodeError as exc:
-        raise RuntimeError("A resposta da API não está em formato válido.") from exc
-    if not isinstance(data, dict):
-        raise RuntimeError("A API retornou um formato inesperado.")
-    return data
 
 
 def value(data: dict[str, Any], *keys: str, default="Não informado") -> Any:
